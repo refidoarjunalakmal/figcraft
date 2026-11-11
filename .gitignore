@@ -1,0 +1,33 @@
+# Lingkungan & Kunci Rahasia
+.env
+.kunci
+*.key
+*.pem
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.bak*
+
+# File Desain Proyek Pengguna & Pratinjau (Besar / Data Internal)
+static/pratinjau/*
+!static/pratinjau/.gitkeep
+*.figcraft
+!backend/library/*.figcraft
+
+# Database & Cadangan
+*.db
+*.db.*
+webui.db*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Log & Temporary
+*.log
+*.tmp
+

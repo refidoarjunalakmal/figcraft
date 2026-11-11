@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>FigCraft</title>
+  <!--
+    Pembuka FigCraft web yang langsung membuka file desain dari server ini.
+    Pakai: buka.html?file=pratinjau/pesan-makan/pesan-makan.figcraft
+    Memakai jalur resmi FigCraft: query ?control memasang window.figcraft (apps/figcraft-web/src/api.rs),
+    lalu figcraft.openFile(nama, bytes). Hanya file di server yang sama yang boleh dibuka.
+  -->
+  <script>
+    // FigCraft membaca ?control (API window.figcraft) dan ?webgl (paksa WebGL2) dari
+    // location.search. Keduanya dipastikan ada: di :18767 editor dipakai dengan ?webgl.
+    // Bersihkan juga &amp; menjadi & jika link tersalin dalam format entitas HTML.
+    (function () {
+      var raw = location.search.replace(/&amp;/g, '&');
+      var q = new URLSearchParams(raw), ubah = false;
+      ['control', 'webgl'].forEach(function (k) { if (!q.has(k)) { q.set(k, ''); ubah = true; } });
+      if (ubah || raw !== location.search) {
+        history.replaceState(null, '', location.pathname + '?' + q.toString().replace(/(control|webgl)=(&|$)/g, '$1$2') + location.hash);
+      }
+    })();
+  </script>
+<script type="module">
+import init, * as bindings from './figcraft-web-ffa0bf2c4c477cbe.js';
+const wasm = await init({ module_or_path: './figcraft-web-ffa0bf2c4c477cbe_bg.wasm' });
+window.wasmBindings = bindings;
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+const status = document.getElementById('buka_status');
+const say = (t, err) => { status.textContent = t; status.dataset.err = err ? '1' : ''; status.hidden = false; };
+const qParams = new URLSearchParams(location.search.replace(/&amp;/g, '&'));
+const file = qParams.get('file') || qParams.get('amp;file');
+if (file) {
+  try {
+    const url = new URL(file, location.href);
+    if (url.origin !== location.origin) throw new Error('hanya file dari server ini yang boleh dibuka');
+    say('Membuka ' + decodeURIComponent(url.pathname.split('/').pop()) + '…');
+    const res = await fetch(url, {cache: 'no-cache'});
+    if (!res.ok) throw new Error('file tidak ditemukan (HTTP ' + res.status + ')');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // window.figcraft dipasang setelah app siap; tunggu sampai ada.
+    for (let i = 0; i < 300 && !window.figcraft; i++) await new Promise(r => setTimeout(r, 100));
+    if (!window.figcraft) throw new Error('FigCraft belum siap');
+    // Font desain INTEK (OFL) belum ada di build web: muat ke sesi ini sebelum membuka file.
+    const toB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+    window.__bukaFont = [];
+    for (const f of ['fonts/oxanium.ttf', 'fonts/roboto.ttf']) {
+      try {
+        const fr = await fetch(f);
+        if (!fr.ok) throw new Error('HTTP ' + fr.status);
+        const r = await window.figcraft.execute('text.loadFont', {data: toB64(new Uint8Array(await fr.arrayBuffer()))});
+        window.__bukaFont.push(f + ': ' + (r.families || []).join(','));
+      } catch (e) { window.__bukaFont.push(f + ': GAGAL ' + (e && e.message || e)); }
+    }
+    const name = decodeURIComponent(url.pathname.split('/').pop());
+    const r = await window.figcraft.openFile(name, bytes);
+    window.__bukaHasil = r;
+    status.hidden = true;   // desain sudah terbuka: jangan biarkan "Membuka…" tampak macet
+    const ld = document.getElementById('figcraft_loading');
+    if (ld) ld.style.display = 'none';
+    // Tutup tab "Untitled" kosong bawaan sesi (indeks 0), hanya bila desain terbuka di tab lain.
+    if (r && r.index > 0) { try { await window.figcraft.execute('file.close', {index: 0, force: true}); } catch (e) {} }
+    try { await window.figcraft.execute('view.zoomFit', {}); } catch (e) {}
+    status.hidden = true;
+    if (ld) ld.style.display = 'none';
+  } catch (e) {
+    window.__bukaError = String(e && e.message || e);
+    say('Gagal membuka desain: ' + window.__bukaError, true);
+    const ld = document.getElementById('figcraft_loading');
+    if (ld) ld.style.display = 'none';
+  }
+}
+</script>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: #f5f5f5; }
+    #figcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    #figcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #6b6b6b; font: 14px system-ui, sans-serif; pointer-events: none; }
+    #figcraft_stopped { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+      padding: 16px; text-align: center; color: #1e1e1e; background: rgba(245, 245, 245, 0.92); font: 14px/1.5 system-ui, sans-serif; }
+    #buka_status { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px;
+      background: #1c1c1e; color: #fff; font: 14px system-ui, sans-serif; pointer-events: none; max-width: calc(100% - 32px); }
+    #buka_status[data-err="1"] { background: #b42318; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #2c2c2c; }
+      #figcraft_loading { color: #b8b8b8; }
+      #figcraft_stopped { color: #f0f0f0; background: rgba(44, 44, 44, 0.92); }
+    }
+  </style>
+<link rel="modulepreload" href="./figcraft-web-ffa0bf2c4c477cbe.js" crossorigin="anonymous" integrity="sha384-eVVgkKaN3EiTk8tGaasLj+94tDkFvhHJDJkEiiU7ktFdUKzF2chk/x9ZuTEM4gk0"><link rel="modulepreload" href="./snippets/eframe-d31a8450ea12dfc1/inline0.js" crossorigin="anonymous" integrity="sha384-uPZQ72BwgZ4v7Km6+UIFbkDDlt7ShGEsAVEHVN/+wZSGFhItJZB83iKMFQXauTSs"><link rel="preload" href="./figcraft-web-ffa0bf2c4c477cbe_bg.wasm" crossorigin="anonymous" integrity="sha384-rgy3TFLtBXZtaDSYzvRmLkrOz3CUMCJRBKzZ2ESrSJKonXygFncxbL3E5JGUQqns" as="fetch" type="application/wasm">  <link rel="stylesheet" href="./riwayat.css">
+  <script src="./riwayat.js" defer></script>
+</head>
+<body>
+  <canvas id="figcraft_canvas"></canvas>
+  <div id="figcraft_loading">Loading FigCraft&hellip;</div>
+  <div id="buka_status" hidden></div>
+</body>
+</html>
